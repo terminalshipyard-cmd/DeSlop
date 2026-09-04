@@ -141,6 +141,22 @@
     <p class="hint">Only applies to channels whose subscriber count is known — that means ones you've opened a video from at least once.</p>
   </div>
 
+  <label class="check">
+    <input type="checkbox" id="exemptVerified">
+    <span>
+      Never flag verified channels
+      <span class="hint">The checkmark is the only marker of an established channel visible in the feed itself, without opening a video first.</span>
+    </span>
+  </label>
+
+  <label class="check">
+    <input type="checkbox" id="debug">
+    <span>
+      Log decisions to the console
+      <span class="hint">Prints every flagged video with the metadata it managed to parse. Useful when something is flagged that shouldn't be.</span>
+    </span>
+  </label>
+
   <div class="stats">
     <div><b id="statLabels">0</b><span>videos you rated</span></div>
     <div><b id="statDisclosed">0</b><span>YouTube-disclosed</span></div>

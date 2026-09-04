@@ -9,6 +9,8 @@ const SYNC_DEFAULTS = {
   useThumbnails: true,
   exemptAgeYears: 2,
   exemptSubs: 500000,
+  exemptVerified: true,
+  debug: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -41,6 +43,8 @@ chrome.storage.sync.get(SYNC_DEFAULTS, (s) => {
   $('enabled').checked = s.enabled;
   $('classifierEnabled').checked = s.classifierEnabled;
   $('useThumbnails').checked = s.useThumbnails;
+  $('exemptVerified').checked = s.exemptVerified;
+  $('debug').checked = s.debug;
   $('hideShortsShelves').checked = s.hideShortsShelves;
   $('keywords').value = toLines(s.keywords);
   $('channels').value = toLines(s.channels);
@@ -79,6 +83,8 @@ $('save').addEventListener('click', () => {
       enabled: $('enabled').checked,
       classifierEnabled: $('classifierEnabled').checked,
       useThumbnails: $('useThumbnails').checked,
+      exemptVerified: $('exemptVerified').checked,
+      debug: $('debug').checked,
       exemptAgeYears: +$('exemptAgeYears').value,
       exemptSubs: SUB_STEPS[+$('exemptSubs').value],
       hideShortsShelves: $('hideShortsShelves').checked,

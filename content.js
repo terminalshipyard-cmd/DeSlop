@@ -19,6 +19,8 @@ const DEFAULTS = {
   useThumbnails: true,
   exemptAgeYears: 2,      // never flag uploads older than this
   exemptSubs: 500000,     // never flag channels at or above this size
+  exemptVerified: true,   // never flag channels with a verified badge
+  debug: false,           // log every flag decision to the console
 };
 
 let settings = { ...DEFAULTS };
@@ -57,6 +59,15 @@ const DURATION_SELECTOR =
   'ytd-thumbnail-overlay-time-status-renderer #text, .badge-shape-wiz__text, .ytThumbnailOverlayBadgeViewModelHost span';
 const META_SELECTOR =
   '#metadata-line span, .yt-content-metadata-view-model__metadata-text';
+// YouTube has shipped at least four different verified-badge markups. Match
+// all of them — a missed badge silently costs the channel its exemption.
+const VERIFIED_SELECTOR = [
+  'ytd-badge-supported-renderer .badge-style-type-verified',
+  'ytd-badge-supported-renderer [aria-label*="verified" i]',
+  '[aria-label*="verified" i]',
+  '.yt-spec-badge-shape--type-verified',
+  '.badge-style-type-verified',
+].join(',');
 
 // ---------------------------------------------------------------- parsing
 
@@ -119,9 +130,7 @@ function parseTile(el) {
     ageDays = ageDays ?? parseAgeDays(t);
   }
 
-  const verified = !!el.querySelector(
-    '[aria-label*="Verified" i], .badge-style-type-verified, ytd-badge-supported-renderer [d^="M23 12l"]'
-  );
+  const verified = !!el.querySelector(VERIFIED_SELECTOR);
 
   const profile = channelProfiles[norm(channel)] || {};
 
@@ -321,15 +330,23 @@ function apply() {
     // channels have subs == null and stay scorable.
     const bigChannel = video.subs != null && video.subs >= settings.exemptSubs;
 
-    if (
-      !settings.classifierEnabled ||
-      tooOld ||
-      bigChannel ||
-      allowlist.has(norm(video.channel)) ||
-      subscriptions.has(norm(video.channel)) ||
-      video.subscribed ||
-      (video.videoId && revealed.has(video.videoId))
-    ) {
+    // Verified badge: the only in-feed signal of an established channel that
+    // doesn't require having visited a watch page. This is what should have
+    // caught Veritasium regardless of the other two gates.
+    const isVerified = settings.exemptVerified && video.verified;
+
+    const exemptReason =
+      !settings.classifierEnabled ? 'classifier off'
+      : tooOld ? 'age'
+      : bigChannel ? 'subscriber count'
+      : isVerified ? 'verified'
+      : allowlist.has(norm(video.channel)) ? 'trusted'
+      : subscriptions.has(norm(video.channel)) ? 'subscribed'
+      : video.subscribed ? 'subscribed'
+      : video.videoId && revealed.has(video.videoId) ? 'revealed'
+      : null;
+
+    if (exemptReason) {
       clearFlag(tile);
       if (video.videoId && revealed.has(video.videoId)) {
         tile.setAttribute('data-yff-revealed', 'true');
@@ -339,6 +356,22 @@ function apply() {
 
     // 3. Model.
     const result = scoreTile(video);
+
+    if (settings.debug && result.p >= settings.collapseAt && !result.logged) {
+      result.logged = true;
+      console.log(
+        `[YFF] FLAG ${(result.p * 100).toFixed(0)}% "${video.title}" — ${video.channel}`,
+        {
+          parsedAgeDays: video.ageDays,
+          parsedSubs: video.subs,
+          parsedVerified: video.verified,
+          parsedDuration: video.durationSec,
+          parsedViews: video.views,
+          firedFeatures: result.named,
+        }
+      );
+    }
+
     if (result.p >= settings.hideAt) {
       tile.setAttribute('data-yff-hidden', 'true');
       clearFlag(tile);
@@ -414,32 +447,40 @@ let subscriptions = new Set();
 
 function harvestSubscriptions() {
   const sections = document.querySelectorAll('ytd-guide-section-renderer');
-  let found = null;
+  let scope = null;
 
   for (const section of sections) {
     const heading = norm(section.querySelector('#guide-section-title, h3')?.textContent);
     if (heading.startsWith('subscription')) {
-      found = section;
+      scope = section;
       break;
     }
   }
-  if (!found) return;
 
-  let added = false;
-  for (const link of found.querySelectorAll('a#endpoint[href]')) {
-    const href = link.getAttribute('href') || '';
-    // Skip "Show more", "Manage", "Browse channels" — only real channel links.
-    if (!/^\/(@|channel\/|c\/|user\/)/.test(href)) continue;
-    const name = norm(link.getAttribute('title') || link.querySelector('.title')?.textContent);
-    if (name && !subscriptions.has(name)) {
-      subscriptions.add(name);
-      added = true;
-    }
+  // Fallback: if the heading isn't where I expect it (YouTube moves this
+  // around, and it's localised), take every channel link in the whole guide.
+  // /@handle and /channel/ID links only ever point at channels — Explore
+  // entries are /gaming, /feed/*, etc. — so this over-collects harmlessly.
+  const root = scope || document.querySelector('#guide, tp-yt-app-drawer, ytd-guide-renderer');
+  if (!root) return;
+
+  const before = subscriptions.size;
+  for (const link of root.querySelectorAll('a[href^="/@"], a[href^="/channel/"], a[href^="/c/"], a[href^="/user/"]')) {
+    const name = norm(
+      link.getAttribute('title') ||
+      link.querySelector('.title, yt-formatted-string')?.textContent ||
+      link.textContent
+    );
+    if (name && name.length < 60) subscriptions.add(name);
   }
 
-  if (added) {
+  if (subscriptions.size !== before) {
     chrome.storage.local.set({ subscriptions: [...subscriptions] });
     scoreCache.clear();
+    console.log(
+      `[YFF] subscriptions: ${subscriptions.size} channels exempt`,
+      scope ? '(from Subscriptions section)' : '(guide-wide fallback)'
+    );
     scheduleApply();
   }
 }
