@@ -18,10 +18,9 @@
 
 .yff-card {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  padding: 10px 12px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
   margin: 0 0 8px;
   border: 1px solid rgba(128, 138, 148, 0.35);
   border-radius: 8px;
@@ -30,20 +29,52 @@
   color: var(--yt-spec-text-secondary, #aaa);
 }
 
+/* A small thumbnail so the bar is a preview you can judge, not a blank box. */
+.yff-card-thumb {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 5px;
+  filter: saturate(0.5) brightness(0.75);
+}
+
+.yff-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .yff-card-label {
   font-weight: 500;
   color: var(--yt-spec-text-primary, #f1f1f1);
 }
 
+.yff-card-title {
+  margin: 2px 0 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--yt-spec-text-primary, #f1f1f1);
+}
+
 .yff-card-why {
-  flex: 1 1 140px;
-  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .yff-card-actions {
   display: flex;
+  flex-direction: column;
   gap: 6px;
-  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* Revealed after a flag — kept visually distinct so you can tell which of the
+   videos on screen the model wanted to hide. */
+[data-yff-revealed="true"] {
+  opacity: 0.82;
+  box-shadow: inset 3px 0 0 rgba(128, 138, 148, 0.55);
 }
 
 .yff-card button {

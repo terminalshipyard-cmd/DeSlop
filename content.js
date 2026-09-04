@@ -25,6 +25,10 @@ let allowlist = new Set();      // channels you've vouched for
 let channelProfiles = {};       // channel -> { subs, verified, subscribed }
 let thumbCache = new Map();     // videoId -> thumbnail features
 const scoreCache = new Map();   // videoId -> { p, reasons, x, named }
+// Videos you explicitly clicked "Show" on. apply() recomputes every tile on
+// every pass — necessary because YouTube recycles nodes — so without this the
+// observer re-flags the tile in the same frame you reveal it.
+const revealed = new Set();
 let modelVersion = 0;           // bump to invalidate scoreCache
 
 const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -181,19 +185,41 @@ function requestThumb(videoId) {
 // ---------------------------------------------------------------- rendering
 
 function buildCard(tile, result) {
+  const { videoId, title, channel } = result.video;
+
   const card = document.createElement('div');
   card.className = 'yff-card';
-  card.dataset.yffVid = result.video.videoId || '';
+  card.dataset.yffVid = videoId || '';
 
-  const label = document.createElement('div');
-  label.className = 'yff-card-label';
-  label.textContent = 'Likely AI-generated';
+  // Thumbnail preview, so you can judge without revealing the whole tile.
+  if (videoId) {
+    const thumb = document.createElement('img');
+    thumb.className = 'yff-card-thumb';
+    thumb.src = `https://i.ytimg.com/vi/${videoId}/default.jpg`;
+    thumb.alt = '';
+    thumb.loading = 'lazy';
+    card.appendChild(thumb);
+  }
 
-  const why = document.createElement('div');
-  why.className = 'yff-card-why';
-  why.textContent = result.reasons.length
-    ? result.reasons.join(' · ')
-    : `confidence ${(result.p * 100).toFixed(0)}%`;
+  const body = document.createElement('div');
+  body.className = 'yff-card-body';
+
+  const head = document.createElement('div');
+  head.className = 'yff-card-label';
+  head.textContent = `Likely AI-generated · ${(result.p * 100).toFixed(0)}%`;
+
+  const name = document.createElement('div');
+  name.className = 'yff-card-title';
+  name.textContent = title;
+  name.title = title;
+
+  const who = document.createElement('div');
+  who.className = 'yff-card-why';
+  who.textContent = channel
+    ? `${channel}${result.reasons.length ? ' — ' + result.reasons.join(' · ') : ''}`
+    : result.reasons.join(' · ');
+
+  body.append(head, name, who);
 
   const actions = document.createElement('div');
   actions.className = 'yff-card-actions';
@@ -203,6 +229,9 @@ function buildCard(tile, result) {
   show.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
+    // Remembered, otherwise the next observer pass immediately re-flags it.
+    if (videoId) revealed.add(videoId);
+    tile.setAttribute('data-yff-revealed', 'true');
     tile.removeAttribute('data-yff-flag');
     card.remove();
   });
@@ -213,14 +242,15 @@ function buildCard(tile, result) {
   wrong.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (videoId) revealed.add(videoId);
     teach(result, 0);
-    vouchChannel(result.video.channel);
+    vouchChannel(channel);
     tile.removeAttribute('data-yff-flag');
     card.remove();
   });
 
   actions.append(show, wrong);
-  card.append(label, why, actions);
+  card.append(body, actions);
   return card;
 }
 
@@ -237,6 +267,8 @@ function applyFlag(tile, result) {
 
 function clearFlag(tile) {
   if (tile.hasAttribute('data-yff-flag')) tile.removeAttribute('data-yff-flag');
+  // Recycled nodes: this marker must not survive into a different video.
+  if (tile.hasAttribute('data-yff-revealed')) tile.removeAttribute('data-yff-revealed');
   const card = tile.querySelector(':scope > .yff-card');
   if (card) card.remove();
 }
@@ -272,9 +304,18 @@ function apply() {
     }
     tile.removeAttribute('data-yff-hidden');
 
-    // 2. Channels you've vouched for or subscribed to are never scored.
-    if (!settings.classifierEnabled || allowlist.has(norm(video.channel)) || video.subscribed) {
+    // 2. Channels you've vouched for, subscribed to, or videos you've
+    //    explicitly revealed are never scored.
+    if (
+      !settings.classifierEnabled ||
+      allowlist.has(norm(video.channel)) ||
+      video.subscribed ||
+      (video.videoId && revealed.has(video.videoId))
+    ) {
       clearFlag(tile);
+      if (video.videoId && revealed.has(video.videoId)) {
+        tile.setAttribute('data-yff-revealed', 'true');
+      }
       continue;
     }
 
