@@ -7,6 +7,8 @@ const SYNC_DEFAULTS = {
   collapseAt: 0.4,
   hideAt: 0.9,
   useThumbnails: true,
+  exemptAgeYears: 2,
+  exemptSubs: 500000,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +23,20 @@ function bindSlider(id, valueId) {
 bindSlider('collapseAt', 'collapseVal');
 bindSlider('hideAt', 'hideVal');
 
+// Subscriber threshold is exponential, so the slider maps to a scale of
+// round numbers rather than a linear count.
+const SUB_STEPS = [0, 10e3, 50e3, 100e3, 250e3, 500e3, 1e6, 2e6, 5e6];
+const subLabel = (n) =>
+  n === 0 ? 'off' : n >= 1e6 ? `${n / 1e6}M` : `${n / 1e3}k`;
+
+$('exemptAgeYears').addEventListener('input', () => {
+  const v = +$('exemptAgeYears').value;
+  $('ageVal').textContent = v === 1 ? '1 year' : `${v} years`;
+});
+$('exemptSubs').addEventListener('input', () => {
+  $('subsVal').textContent = subLabel(SUB_STEPS[+$('exemptSubs').value]);
+});
+
 chrome.storage.sync.get(SYNC_DEFAULTS, (s) => {
   $('enabled').checked = s.enabled;
   $('classifierEnabled').checked = s.classifierEnabled;
@@ -33,6 +49,12 @@ chrome.storage.sync.get(SYNC_DEFAULTS, (s) => {
   $('hideAt').value = Math.round(s.hideAt * 100);
   $('collapseVal').textContent = pct(s.collapseAt);
   $('hideVal').textContent = pct(s.hideAt);
+
+  $('exemptAgeYears').value = s.exemptAgeYears;
+  $('ageVal').textContent = s.exemptAgeYears === 1 ? '1 year' : `${s.exemptAgeYears} years`;
+  const subIdx = SUB_STEPS.indexOf(s.exemptSubs);
+  $('exemptSubs').value = subIdx === -1 ? 5 : subIdx;
+  $('subsVal').textContent = subLabel(s.exemptSubs);
 });
 
 chrome.storage.local.get({ labelQueue: [], allowlist: [], model: null }, (l) => {
@@ -57,6 +79,8 @@ $('save').addEventListener('click', () => {
       enabled: $('enabled').checked,
       classifierEnabled: $('classifierEnabled').checked,
       useThumbnails: $('useThumbnails').checked,
+      exemptAgeYears: +$('exemptAgeYears').value,
+      exemptSubs: SUB_STEPS[+$('exemptSubs').value],
       hideShortsShelves: $('hideShortsShelves').checked,
       keywords: toList($('keywords').value),
       channels: toList($('channels').value),

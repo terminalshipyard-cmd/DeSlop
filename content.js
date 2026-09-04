@@ -17,6 +17,8 @@ const DEFAULTS = {
   collapseAt: 0.4,    // show a slim "likely AI" bar
   hideAt: 0.9,        // remove entirely
   useThumbnails: true,
+  exemptAgeYears: 2,      // never flag uploads older than this
+  exemptSubs: 500000,     // never flag channels at or above this size
 };
 
 let settings = { ...DEFAULTS };
@@ -304,10 +306,25 @@ function apply() {
     }
     tile.removeAttribute('data-yff-hidden');
 
-    // 2. Channels you've vouched for, are subscribed to, or videos you've
-    //    explicitly revealed are never scored.
+    // 2. Hard exemptions — never scored at all.
+    //
+    // Age: YouTube only reports "2 years ago" in the feed, which parseAgeDays
+    // reads as exactly 730 days. A video actually uploaded in Dec 2023 shows
+    // the same string, so its parsed age *understates* the real one. The
+    // comparison therefore has to be generous or it exempts nothing near the
+    // boundary. Videos with no visible date are left scorable.
+    const ageCutoff = settings.exemptAgeYears * 365;
+    const tooOld = video.ageDays != null && video.ageDays >= ageCutoff;
+
+    // Size: only applies once the subscriber count is known, which means
+    // you've opened one of that channel's videos at some point. Unvisited
+    // channels have subs == null and stay scorable.
+    const bigChannel = video.subs != null && video.subs >= settings.exemptSubs;
+
     if (
       !settings.classifierEnabled ||
+      tooOld ||
+      bigChannel ||
       allowlist.has(norm(video.channel)) ||
       subscriptions.has(norm(video.channel)) ||
       video.subscribed ||
