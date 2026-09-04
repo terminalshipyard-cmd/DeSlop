@@ -304,11 +304,12 @@ function apply() {
     }
     tile.removeAttribute('data-yff-hidden');
 
-    // 2. Channels you've vouched for, subscribed to, or videos you've
+    // 2. Channels you've vouched for, are subscribed to, or videos you've
     //    explicitly revealed are never scored.
     if (
       !settings.classifierEnabled ||
       allowlist.has(norm(video.channel)) ||
+      subscriptions.has(norm(video.channel)) ||
       video.subscribed ||
       (video.videoId && revealed.has(video.videoId))
     ) {
@@ -384,6 +385,46 @@ function vouchChannel(channel) {
   if (!key || allowlist.has(key)) return;
   allowlist.add(key);
   chrome.storage.local.set({ allowlist: [...allowlist] });
+}
+
+// ---------------------------------------------------------------- subscriptions
+//
+// The guide sidebar lists every channel you're subscribed to. Reading it
+// directly is far better than waiting to detect a subscription on a watch
+// page, which only covers channels you happen to open.
+
+let subscriptions = new Set();
+
+function harvestSubscriptions() {
+  const sections = document.querySelectorAll('ytd-guide-section-renderer');
+  let found = null;
+
+  for (const section of sections) {
+    const heading = norm(section.querySelector('#guide-section-title, h3')?.textContent);
+    if (heading.startsWith('subscription')) {
+      found = section;
+      break;
+    }
+  }
+  if (!found) return;
+
+  let added = false;
+  for (const link of found.querySelectorAll('a#endpoint[href]')) {
+    const href = link.getAttribute('href') || '';
+    // Skip "Show more", "Manage", "Browse channels" — only real channel links.
+    if (!/^\/(@|channel\/|c\/|user\/)/.test(href)) continue;
+    const name = norm(link.getAttribute('title') || link.querySelector('.title')?.textContent);
+    if (name && !subscriptions.has(name)) {
+      subscriptions.add(name);
+      added = true;
+    }
+  }
+
+  if (added) {
+    chrome.storage.local.set({ subscriptions: [...subscriptions] });
+    scoreCache.clear();
+    scheduleApply();
+  }
 }
 
 // ---------------------------------------------------------------- watch page
@@ -465,7 +506,7 @@ function tileFromLink(linkUrl) {
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type !== 'markSlop') return;
+  if (msg.type !== 'markSlop' && msg.type !== 'markSafe') return;
 
   const tile = tileFromLink(msg.linkUrl) || lastContextTile;
   if (!tile) {
@@ -480,9 +521,18 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 
   const result = scoreTile(video);
-  teach(result, 1);
-  tile.setAttribute('data-yff-hidden', 'true');
-  console.log('[YFF] marked as slop:', video.title, '—', video.channel);
+
+  if (msg.type === 'markSlop') {
+    teach(result, 1);
+    tile.setAttribute('data-yff-hidden', 'true');
+    console.log('[YFF] marked as slop:', video.title, '—', video.channel);
+  } else {
+    teach(result, 0);
+    vouchChannel(video.channel);
+    if (video.videoId) revealed.add(video.videoId);
+    clearFlag(tile);
+    console.log('[YFF] marked as safe:', video.title, '— channel trusted:', video.channel);
+  }
 });
 
 // ---------------------------------------------------------------- boot
@@ -492,7 +542,7 @@ function loadAll() {
     new Promise((r) => chrome.storage.sync.get(DEFAULTS, r)),
     new Promise((r) =>
       chrome.storage.local.get(
-        { model: null, allowlist: [], channelProfiles: {}, globalWeights: null },
+        { model: null, allowlist: [], channelProfiles: {}, globalWeights: null, subscriptions: [] },
         r
       )
     ),
@@ -506,6 +556,7 @@ function loadAll() {
     model = new Classifier(local.model || {});
     if (local.globalWeights) model.global.w = local.globalWeights;
     allowlist = new Set(local.allowlist || []);
+    subscriptions = new Set(local.subscriptions || []);
     channelProfiles = local.channelProfiles || {};
     modelVersion++;
     scoreCache.clear();
@@ -522,6 +573,7 @@ function start() {
     harvested.clear();
     scheduleApply();
     setTimeout(harvestWatchPage, 1200);
+    setTimeout(harvestSubscriptions, 1200);
   }, true);
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -532,6 +584,9 @@ function start() {
 
   scheduleApply();
   setTimeout(harvestWatchPage, 1500);
+  // The guide sidebar populates late and re-renders on navigation.
+  setTimeout(harvestSubscriptions, 2000);
+  setInterval(harvestSubscriptions, 30000);
 }
 
 loadAll().then(() => {

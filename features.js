@@ -194,6 +194,20 @@ const NAMED = [
   },
   { key: 'thumb_colorfulness', seed: 0, fn: (v) => v.thumb?.colorfulness ?? 0 },
   { key: 'thumb_edge_density', seed: 0, fn: (v) => v.thumb?.edgeDensity ?? 0 },
+  {
+    // NEGATIVE weight. Camera footage — an unboxing, a workshop, a talking
+    // head — should be actively pulled away from the slop side rather than
+    // merely failing to trigger the positive features.
+    key: 'thumb_photographic',
+    seed: -1.1,
+    fn: (v) => v.thumb?.photographic ?? 0,
+  },
+  {
+    // NEGATIVE weight. Visible hands or faces: someone was physically there.
+    key: 'thumb_skin',
+    seed: -0.9,
+    fn: (v) => v.thumb?.skin ?? 0,
+  },
 ];
 
 const NAMED_INDEX = Object.fromEntries(NAMED.map((f, i) => [f.key, i]));
