@@ -1,0 +1,72 @@
+/* Hard hide — used by explicit keyword/channel filters and by the classifier
+   above the hide threshold. */
+[data-yff-hidden="true"] {
+  display: none !important;
+}
+
+/* Soft collapse — the tile stays in the layout but shrinks to a labelled bar
+   you can override. Hiding silently would make false positives invisible,
+   which is exactly the failure mode that matters here. */
+[data-yff-flag="true"] > *:not(.yff-card) {
+  display: none !important;
+}
+
+[data-yff-flag="true"] {
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.yff-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  margin: 0 0 8px;
+  border: 1px solid rgba(128, 138, 148, 0.35);
+  border-radius: 8px;
+  background: rgba(128, 138, 148, 0.07);
+  font: 12.5px/1.4 "Roboto", system-ui, sans-serif;
+  color: var(--yt-spec-text-secondary, #aaa);
+}
+
+.yff-card-label {
+  font-weight: 500;
+  color: var(--yt-spec-text-primary, #f1f1f1);
+}
+
+.yff-card-why {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.yff-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.yff-card button {
+  padding: 4px 10px;
+  border: 1px solid rgba(128, 138, 148, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.yff-card button:hover {
+  background: rgba(128, 138, 148, 0.18);
+}
+
+.yff-card button.yff-primary {
+  border-color: transparent;
+  background: rgba(128, 138, 148, 0.22);
+  color: var(--yt-spec-text-primary, #f1f1f1);
+}
+
+.yff-card button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}

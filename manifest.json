@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "DeSlop",
+  "version": "2.0.0",
+  "description": "Hide AI-generated slop from your YouTube feed. Learns from your feedback.",
+  "permissions": ["storage", "contextMenus"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://i.ytimg.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["features.js", "model.js", "content.js"],
+      "css": ["hide.css"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "DeSlop",
+    "default_popup": "options.html"
+  }
+}
